@@ -60,24 +60,25 @@ async function webSearch(){
   try{$('web').textContent=await ai(`Trouve les prix actuels en Suisse (Migros, Coop, Lidl, Denner, Galaxus, etc.) pour : ${p.name||''} ${p.brand||''} ${p.qty||''}. Réponds en français, 6 lignes max : magasin, prix, date, source. Si tu n'es pas sûr, dis-le clairement.`,{search:true})}catch(e){$('web').textContent='Recherche indisponible.'}}
 
 /* ===== SCAN ===== */
-function rScan(){$('app').innerHTML=`<div class="card"><video id="vid" playsinline muted style="width:100%;border-radius:14px;display:none;max-height:240px;object-fit:cover"></video>
+function rScan(){$('app').innerHTML=`<div class="card"><video id="vid" playsinline muted style="width:100%;border-radius:14px;display:none;max-height:260px;object-fit:cover;border:3px solid var(--p)"></video><div id="hint" class="sm" style="margin:6px 0"></div>
 <button class="btn" onclick="startScan()">📷 Scanner un code-barres</button>
 <label class="btn g">📸 Photo du code-barres<input type="file" accept="image/*" capture="environment" hidden onchange="codePhoto(this)"></label>
 <div class="row"><input id="code" inputmode="numeric" placeholder="Ou tape le code"><button class="btn g" style="flex:0 0 70px" onclick="lookup($('code').value)">OK</button></div>
 <label class="btn g">🏷️ Photo de l'étiquette (IA)<input type="file" accept="image/*" capture="environment" hidden onchange="labelPhoto(this)"></label></div><div id="prod"></div>`;if(cur)renderProd()}
 function loadZ(){return new Promise((ok,ko)=>{if(window.ZXing)return ok();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
-async function startScan(){stopScan();const v=$('vid');v.style.display='block';
-  try{if('BarcodeDetector' in window){stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});v.srcObject=stream;await v.play();
-      const bd=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});scanning=true;
-      (async function loop(){if(!scanning)return;try{const r=await bd.detect(v);if(r.length)return found(r[0].rawValue)}catch(e){}setTimeout(loop,250)})()}
-    else{await loadZ();zr=new ZXing.BrowserMultiFormatReader();zr.decodeFromVideoDevice(null,'vid',r=>{if(r)found(r.getText())})}
-  }catch(e){toast('Caméra bloquée ici ('+(e&&e.name||'?')+'). Ouvre la page dans Safari, ou utilise « Photo du code-barres ».');stopScan()}}
+async function startScan(){stopScan();const v=$('vid');v.style.display='block';$('hint').textContent='Démarrage de la caméra…';
+  try{await loadZ();const Z=ZXing,h=new Map();
+    h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E]);h.set(Z.DecodeHintType.TRY_HARDER,true);
+    zr=new Z.BrowserMultiFormatReader(h,250);
+    await zr.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},'vid',x=>{if(x)found(x.getText())});
+    $('hint').textContent='Vise le code-barres, à plat, bien net et éclairé…';
+  }catch(e){const n=e&&e.name||'?';toast(n==='NotAllowedError'?'Caméra refusée : touche aA > Réglages du site web > Caméra > Autoriser, puis recharge.':'Caméra indisponible ('+n+'). Utilise « Photo du code-barres » ou ouvre la page dans Safari.');stopScan()}}
+function stopScan(){scanning=false;try{zr&&zr.reset()}catch(e){}zr=null;const v=$('vid');if(v){v.style.display='none'}const h=$('hint');if(h)h.textContent=''}
 async function codePhoto(inp){const f=inp.files[0];if(!f)return;toast('Lecture du code…');let u;
   try{let code=null;u=URL.createObjectURL(f);
     if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}).detect(await createImageBitmap(f));if(r.length)code=r[0].rawValue}catch(e){}}
     if(!code){await loadZ();code=(await new ZXing.BrowserMultiFormatReader().decodeFromImageUrl(u)).getText()}
     found(code)}catch(e){toast('Code non lu : photo bien nette et droite, ou tape les chiffres.')}finally{u&&URL.revokeObjectURL(u)}}
-function stopScan(){scanning=false;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null;try{zr&&zr.reset()}catch(e){}zr=null;const v=$('vid');if(v)v.style.display='none'}
 function found(c){navigator.vibrate&&navigator.vibrate(60);stopScan();lookup(c)}
 async function lookup(c){
   c=String(c||'').replace(/\D/g,'');if(!c)return toast('Code invalide');cur={code:c,op:[]};$('prod').innerHTML='<div class="card">Recherche du produit…</div>';
@@ -109,7 +110,11 @@ function base(f){if(!f.quantite)return null;const n=f.quantite,u=f.unite;return 
 const lab={g:'/100 g',ml:'/100 ml',pc:'/pièce'};
 const u100=(f,b)=>b?(b.k==='pc'?f.prix*PF[f.promo]/b.n:f.prix*PF[f.promo]/b.n*100):null;
 function analyse(){if(!cur||!$('ver'))return;const f=getF(),b=base(f),u=u100(f,b),L=[],c=cur.code;
-  if(!f.prix){$('ver').innerHTML='';return}
+  if(!f.prix){const by={};D.prices.filter(p=>p.code===c).forEach(p=>by[p.store]=p);const k=Object.values(by);let h='';
+    if(k.length)h+=`<div class="v info">Prix déjà relevés : ${k.map(p=>`<b>${p.store}</b> ${fmt(p.price)} (${p.date})`).join(' • ')}</div>`;
+    if(cur.op&&cur.op.length){const s2=[...cur.op].sort((a,b2)=>a-b2);h+=`<div class="v info">Open Prices (communauté) : médiane ${fmt(s2[Math.floor(s2.length/2)])} CHF sur ${s2.length} relevé(s).</div>`}
+    if(!h)h='<div class="v warn">Aucun prix connu pour ce produit. Entre le prix de l\'étiquette (ou photographie-la) : ton relevé construit l\'historique et déclenche le verdict.</div>';
+    $('ver').innerHTML=h;return}
   const hist=D.prices.filter(p=>p.code===c&&p.u100&&b&&p.kind===b.k).sort((a,b2)=>a.date<b2.date?-1:1);
   if(u)L.push(['info',`Prix effectif : <b>${fmt(u)} CHF ${lab[b.k]}</b>${f.promo!=='none'?' (offre incluse)':''}`]);
   if(f.ancien_prix>f.prix)L.push(['info',`Rabais annoncé : −${Math.round((f.ancien_prix-f.prix)/f.ancien_prix*100)}%`]);
