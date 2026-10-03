@@ -39,6 +39,7 @@ try{Object.assign(D,JSON.parse(localStorage.getItem(K)||'{}'))}catch(e){}
 const $=i=>document.getElementById(i),save=()=>{try{localStorage.setItem(K,JSON.stringify(D))}catch(e){toast('Mémoire pleine')}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',4500)}
+const md=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
 const fmt=n=>(Math.round(n*100)/100).toFixed(2);
 function go(t){stopScan();tab=t;$('nav').innerHTML=[['scan','📷','Scanner'],['hist','📈','Historique'],['list','🛒','Liste'],['bud','💰','Budget'],['set','⚙️','Réglages']].map(x=>`<button class="${x[0]===t?'on':''}" onclick="go('${x[0]}')"><b>${x[1]}</b>${x[2]}</button>`).join('');
   ({scan:rScan,hist:rHist,list:rList,bud:rBud,set:rSet})[t]()}
@@ -62,7 +63,7 @@ async function labelPhoto(inp){
     if(ST[j.magasin])D.store=j.magasin;renderProd(j);toast('Étiquette lue ✅ vérifie les valeurs')}catch(e){if(e!==0&&typeof e!=='number')toast('Lecture impossible, saisis à la main')}}
 async function webSearch(){
   const p=D.prod[cur.code]||{};$('web').textContent='Recherche en cours…';
-  try{$('web').textContent=await ai(`Trouve les prix actuels en Suisse (Migros, Coop, Lidl, Denner, Galaxus, etc.) pour : ${p.name||''} ${p.brand||''} ${p.qty||''}. Réponds en français, 6 lignes max : magasin, prix, date, source. Si tu n'es pas sûr, dis-le clairement.`,{search:true})}catch(e){$('web').textContent='Recherche indisponible.'}}
+  try{$('web').innerHTML=md(await ai(`Trouve les prix actuels en Suisse (Migros, Coop, Lidl, Denner, Galaxus, etc.) pour : ${p.name||''} ${p.brand||''} ${p.qty||''}. Réponds en français, 6 lignes max : magasin, prix, date, source. Si tu n'es pas sûr, dis-le clairement.`,{search:true}))}catch(e){$('web').textContent='Recherche indisponible.'}}
 
 /* ===== SCAN ===== */
 function rScan(){$('app').innerHTML=`<div class="card">
@@ -153,7 +154,7 @@ function addList(){D.list.push({id:Date.now(),t:(D.prod[cur.code]||{}).name||'Pr
 
 /* ===== HISTORIQUE / LISTE / RÉGLAGES ===== */
 function spark(v){if(v.length<2)return'';const mx=Math.max(...v),mn=Math.min(...v),r=mx-mn||1;
-  return `<svg viewBox="0 0 100 30" style="width:100%;height:36px"><polyline fill="none" stroke="#FF6600" stroke-width="2" points="${v.map((x,i)=>`${i*100/(v.length-1)},${28-(x-mn)/r*26}`).join(' ')}"/></svg>`}
+  return `<svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:40px"><polyline vector-effect="non-scaling-stroke" fill="none" stroke="#FF6600" stroke-width="2.5" points="${v.map((x,i)=>`${i*100/(v.length-1)},${28-(x-mn)/r*26}`).join(' ')}"/></svg>`}
 let hf={q:'',s:''};
 function rHist(){$('app').innerHTML=offH()+`<div class="card"><input id="hq" placeholder="🔍 Rechercher un produit" value="${esc(hf.q)}" oninput="hf.q=this.value;hList()"><div style="margin-top:8px">${['',...Object.keys(ST).slice(0,4)].map(s=>`<span class="chip" style="${hf.s===s?`background:${ST[s]||'#FF6600'};color:#fff`:''}" onclick="hf.s='${s}';rHist()">${s||'Tous'}</span>`).join('')}</div></div><div id="hres"></div>`;hList()}
 function hList(){const q=hf.q.toLowerCase().trim(),g={};
@@ -222,7 +223,8 @@ function inflH(){const g={},v=[];D.prices.forEach(p=>(g[p.code]=g[p.code]||[]).p
   const m=v.reduce((s,x)=>s+x,0)/v.length;return `<div class="card"><b>Inflation perso</b><div style="font-size:26px;font-weight:900;color:${m>0?'var(--r)':'var(--g)'}">${m>0?'+':''}${m.toFixed(1)}%</div><div class="sm">Variation moyenne du prix de ${v.length} produit(s) achetés plusieurs fois.</div></div>`}
 async function ingPhoto(inp){const f=inp.files[0];if(!f)return;$('web').textContent='Lecture des ingrédients…';
   try{const al=ALG.filter(a=>D.alg.includes(a[1])).map(a=>a[0]).join(', ')||'aucune renseignée';
-    $('web').textContent=await ai(`Photo d'une liste d'ingrédients. Mes allergies : ${al}. Réponds en français, 5 lignes max : allergènes présents, traces possibles, puis un verdict : OK / À ÉVITER / INCERTAIN. Si l'image est illisible, dis-le.`,{img:await compress(f)})}catch(e){$('web').textContent='Lecture impossible.'}}
+    const warn=D.alg.length?'':'⚠️ Aucune allergie cochée dans Réglages : coche les tiennes pour un verdict personnalisé.\n\n';
+    $('web').innerHTML=md(warn+await ai(`Photo d'une liste d'ingrédients. Mes allergies : ${al}. Réponds en français, 5 lignes max : allergènes présents, traces possibles, puis un verdict : OK / À ÉVITER / INCERTAIN. Si l'image est illisible, dis-le.`,{img:await compress(f)}))}catch(e){$('web').textContent='Lecture impossible.'}}
 function geo(){if(!navigator.geolocation)return toast('Position indisponible');toast('Recherche du magasin…');
   navigator.geolocation.getCurrentPosition(async p=>{try{const q=`[out:json][timeout:10];nwr(around:150,${p.coords.latitude},${p.coords.longitude})[shop];out tags 30;`;
     const d=await(await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q))).json();const t=d.elements.map(e=>((e.tags.brand||'')+' '+(e.tags.name||'')).toLowerCase()).join(' ');
