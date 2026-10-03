@@ -121,6 +121,7 @@ function analyse(){if(!cur||!$('ver'))return;const f=getF(),b=base(f),u=u100(f,b
   if(!f.prix){const by={};D.prices.filter(p=>p.code===c).forEach(p=>by[p.store]=p);const k=Object.values(by);let h='';
     if(k.length)h+=`<div class="v info">Prix déjà relevés : ${k.map(p=>`<b>${p.store}</b> ${fmt(p.price)} (${p.date})`).join(' • ')}</div>`;
     if(cur.op&&cur.op.length){const s2=[...cur.op].sort((a,b2)=>a-b2);h+=`<div class="v info">Open Prices (communauté) : médiane ${fmt(s2[Math.floor(s2.length/2)])} CHF sur ${s2.length} relevé(s).</div>`}
+    const tx=tix(D.prod[c]||{});if(tx.length)h+=`<div class="v info">🧾 Vu sur tes tickets (nom proche) : ${tx.map(x=>`<span class="chip" onclick="useP(${x.price},'${x.store}')">${x.store} ${fmt(x.price)} · ${esc(x.name)}</span>`).join('')}<div class="sm">Touche pour utiliser ce prix.</div></div>`;
     if(!h)h='<div class="v warn">Aucun prix connu pour ce produit. Entre le prix de l\'étiquette (ou photographie-la) : ton relevé construit l\'historique et déclenche le verdict.</div>';
     $('ver').innerHTML=h;return}
   const hist=D.prices.filter(p=>p.code===c&&p.u100&&b&&p.kind===b.k).sort((a,b2)=>a.date<b2.date?-1:1);
@@ -137,6 +138,7 @@ function analyse(){if(!cur||!$('ver'))return;const f=getF(),b=base(f),u=u100(f,b
   if(u){const by={};hist.forEach(h=>{if(h.store!==D.store)by[h.store]=h});const o=Object.values(by).filter(h=>h.u100<u).sort((a,b2)=>a.u100-b2.u100)[0];
     if(o)L.push(['warn',`💡 <b>Moins cher chez ${o.store}</b> : ${fmt(o.u100)} ${lab[b.k]} (−${Math.round((u-o.u100)/u*100)}%, relevé le ${o.date}).`])}
   if(cur.op&&cur.op.length){const s=[...cur.op].sort((a,b2)=>a-b2);L.push(['info',`Open Prices : médiane ${fmt(s[Math.floor(s.length/2)])} CHF (${s.length} relevés de la communauté).`])}
+  const tx2=tix(D.prod[c]||{});if(tx2.length)L.push(['info','🧾 Vu sur tes tickets : '+tx2.map(x=>x.store+' '+fmt(x.price)+' ('+x.date+')').join(' • ')]);
   $('ver').innerHTML=L.map(x=>`<div class="v ${x[0]}">${x[1]}</div>`).join('');cur.txt=L.map(x=>x[1].replace(/<[^>]+>/g,'')).join('. ')}
 function savePrice(){const f=getF(),b=base(f);if(!f.prix)return toast('Entre un prix');
   D.prices.push({id:Date.now(),code:cur.code,name:(D.prod[cur.code]||{}).name,store:D.store,price:f.prix,old:f.ancien_prix,promo:f.promo,qty:b?b.n:0,kind:b?b.k:'',u100:u100(f,b),date:new Date().toISOString().slice(0,10)});const tg=+($('tg')||{}).value;if(tg>0)D.targets[cur.code]=tg;else delete D.targets[cur.code];save();if(D.targets[cur.code]&&f.prix<=D.targets[cur.code])navigator.vibrate&&navigator.vibrate([80,60,80]);toast(D.targets[cur.code]&&f.prix<=D.targets[cur.code]?'🎯 Prix cible atteint !':'Prix enregistré ✅');analyse()}
@@ -147,10 +149,19 @@ function addList(){D.list.push({id:Date.now(),t:(D.prod[cur.code]||{}).name||'Pr
 /* ===== HISTORIQUE / LISTE / RÉGLAGES ===== */
 function spark(v){if(v.length<2)return'';const mx=Math.max(...v),mn=Math.min(...v),r=mx-mn||1;
   return `<svg viewBox="0 0 100 30" style="width:100%;height:36px"><polyline fill="none" stroke="#FF6600" stroke-width="2" points="${v.map((x,i)=>`${i*100/(v.length-1)},${28-(x-mn)/r*26}`).join(' ')}"/></svg>`}
-function rHist(){const g={};D.prices.forEach(p=>(g[p.code]=g[p.code]||[]).push(p));const ks=Object.keys(g);
-  $('app').innerHTML=offH()+(ks.length?ks.map(c=>{const a=g[c].sort((x,y)=>x.date<y.date?-1:1);return `<div class="card"><b>${esc(a[0].name)}</b>
-  ${spark(a.filter(x=>x.u100).map(x=>x.u100))}${a.slice().reverse().map(x=>`<div class="hd sm" style="padding:4px 0"><span><span class="chip" style="background:${ST[x.store]||'#666'};color:#fff;padding:2px 9px">${x.store}</span> ${x.date}</span><span><b>${fmt(x.price)}</b>${x.old?` <s>${fmt(x.old)}</s>`:''} <a onclick="delP(${x.id})">✕</a></span></div>`).join('')}</div>`}).join(''):'<div class="card sm">Aucun prix enregistré. Scanne un produit et touche « Enregistrer ».</div>')}
-function delP(id){D.prices=D.prices.filter(p=>p.id!==id);save();rHist()}
+let hf={q:'',s:''};
+function rHist(){$('app').innerHTML=offH()+`<div class="card"><input id="hq" placeholder="🔍 Rechercher un produit" value="${esc(hf.q)}" oninput="hf.q=this.value;hList()"><div style="margin-top:8px">${['',...Object.keys(ST).slice(0,4)].map(s=>`<span class="chip" style="${hf.s===s?`background:${ST[s]||'#FF6600'};color:#fff`:''}" onclick="hf.s='${s}';rHist()">${s||'Tous'}</span>`).join('')}</div></div><div id="hres"></div>`;hList()}
+function hList(){const q=hf.q.toLowerCase().trim(),g={};
+  D.prices.filter(p=>(!hf.s||p.store===hf.s)&&(!q||(p.name||'').toLowerCase().includes(q))).forEach(p=>(g[p.code]=g[p.code]||[]).push(p));
+  const ks=Object.keys(g).sort((x,y)=>(g[x][0].name||'').localeCompare(g[y][0].name||''));
+  $('hres').innerHTML=ks.length?`<div class="sm" style="margin:0 4px 6px">${ks.length} produit(s)</div>`+ks.map(c=>{const a=g[c].sort((x,y)=>x.date<y.date?-1:1);return `<div class="card"><b>${esc(a[0].name)}</b>${D.targets[c]?` <span class="sm">🎯 ${fmt(D.targets[c])}</span>`:''}
+  ${spark(a.filter(x=>x.u100).map(x=>x.u100))}${a.slice().reverse().map(x=>`<div class="hd sm" style="padding:4px 0"><span><span class="chip" style="background:${ST[x.store]||'#666'};color:#fff;padding:2px 9px">${x.store}</span> ${x.date}</span><span><b>${fmt(x.price)}</b>${x.old?` <s>${fmt(x.old)}</s>`:''} <a onclick="delP(${x.id})">✕</a></span></div>`).join('')}</div>`}).join(''):'<div class="card sm">Aucun résultat. Scanne un produit, un ticket ou change le filtre.</div>'}
+const tok=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/[^a-z0-9]+/).filter(x=>x.length>=4);
+function tix(p){const a=tok(p.name);if(!a.length)return[];const by={};
+  D.prices.filter(x=>String(x.code).startsWith('n:')).forEach(x=>{const b=tok(x.name),n=a.filter(w=>b.some(y=>y.slice(0,5)===w.slice(0,5))).length;
+    if(n>=2||(n>=1&&a.length<=2)){if(!by[x.store]||by[x.store].date<=x.date)by[x.store]=x}});return Object.values(by)}
+function useP(p,s){D.store=s;const f=getF();f.prix=p;renderProd(f)}
+function delP(id){D.prices=D.prices.filter(p=>p.id!==id);save();hList()}
 const slug=t=>String(t).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40),J=t=>JSON.parse(t.replace(/```json|```/g,'').trim());
 function best(t){const w=t.toLowerCase().split(/\s+/).filter(x=>x.length>2)[0];if(!w)return null;const by={};
   D.prices.filter(p=>(p.name||'').toLowerCase().includes(w)).sort((a,b)=>a.date<b.date?-1:1).forEach(p=>by[p.store]=p);
