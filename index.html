@@ -230,6 +230,6 @@ function expCsv(){const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',row
   const u=URL.createObjectURL(new Blob(['\ufeff'+rows.map(x=>x.map(q).join(';')).join('\n')],{type:'text/csv'})),a=document.createElement('a');a.href=u;a.download='prixmalin.csv';document.body.appendChild(a);a.click();a.remove()}
 function exp(){const u=URL.createObjectURL(new Blob([JSON.stringify({...D,key:''},null,1)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='prixmalin-sauvegarde.json';document.body.appendChild(a);a.click();a.remove()}
 (()=>{const c=document.createElement('canvas');c.width=c.height=180;const x=c.getContext('2d');x.fillStyle='#FF6600';x.fillRect(0,0,180,180);x.fillStyle='#fff';x.font='bold 120px -apple-system,sans-serif';x.textAlign='center';x.fillText('P',90,138);const l=document.createElement('link');l.rel='apple-touch-icon';l.href=c.toDataURL('image/png');document.head.appendChild(l)})();
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+try{if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(x=>x.unregister()));if(window.caches)caches.keys().then(k=>k.forEach(x=>caches.delete(x)))}catch(e){}
 go('scan');
 </script></body></html>
