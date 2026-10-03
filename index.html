@@ -27,6 +27,7 @@ nav button{background:none;border:none;color:var(--t2);font-size:11px;font-weigh
 <div id="sc" style="display:none;position:fixed;inset:0;background:#000;z-index:90"><video id="vid" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
 <div style="position:absolute;left:6%;right:6%;top:30%;height:26%;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.5)"></div>
 <div id="hint" style="position:absolute;left:0;right:0;top:60%;text-align:center;color:#fff;font-weight:700;padding:0 20px"></div>
+<label class="btn g" style="position:absolute;left:20px;right:20px;bottom:calc(92px + var(--sb));background:#ffffffe6;color:#111;width:auto">📸 Photo du code (appareil photo)<input type="file" accept="image/*" capture="environment" hidden onchange="codePhoto(this)"></label>
 <button class="btn" style="position:absolute;left:20px;right:20px;bottom:calc(30px + var(--sb));width:auto" onclick="stopScan()">✕ Fermer</button></div>
 <nav id="nav"></nav>
 <script>
@@ -73,13 +74,16 @@ function rScan(){$('app').innerHTML=`<div class="card">
 function loadZ(){return new Promise((ok,ko)=>{if(window.ZXing)return ok();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
 async function startScan(){stopScan();const v=$('vid');$('sc').style.display='block';$('hint').textContent='Démarrage de la caméra…';
   try{await loadZ();const Z=ZXing,h=new Map();
-    h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E]);h.set(Z.DecodeHintType.TRY_HARDER,true);
-    zr=new Z.BrowserMultiFormatReader(h,250);
+    h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E,Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.ITF]);h.set(Z.DecodeHintType.TRY_HARDER,true);
+    zr=new Z.BrowserMultiFormatReader(h,120);
     await zr.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},'vid',x=>{if(x)found(x.getText())});
     try{await v.srcObject.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
-    $('hint').textContent='Place le code-barres dans le cadre, à plat et net';
+    $('hint').textContent='Place le code dans le cadre, à 15-25 cm, bien droit, sans reflet';
+    if('BarcodeDetector' in window){try{const sf=await BarcodeDetector.getSupportedFormats(),ff=['ean_13','ean_8','upc_a','upc_e','code_128','itf'].filter(x=>sf.includes(x));
+      if(ff.length){const bd=new BarcodeDetector({formats:ff});scanning=true;(async function lp(){if(!scanning)return;try{const q=await bd.detect(v);if(q.length)return found(q[0].rawValue)}catch(e){}setTimeout(lp,200)})()}}catch(e){}}
+    window._st=setTimeout(()=>{if($('sc').style.display==='block')$('hint').textContent='Rien lu : éloigne un peu le téléphone (15-25 cm), évite les reflets, ou touche « Photo du code » ci-dessous.'},8000);
   }catch(e){const n=e&&e.name||'?';toast(n==='NotAllowedError'?'Caméra refusée : touche aA > Réglages du site web > Caméra > Autoriser, puis recharge.':'Caméra indisponible ('+n+'). Utilise « Photo du code-barres » ou ouvre la page dans Safari.');stopScan()}}
-function stopScan(){scanning=false;try{zr&&zr.reset()}catch(e){}zr=null;const sc=$('sc');if(sc)sc.style.display='none';const h=$('hint');if(h)h.textContent=''}
+function stopScan(){scanning=false;clearTimeout(window._st);try{zr&&zr.reset()}catch(e){}zr=null;const sc=$('sc');if(sc)sc.style.display='none';const h=$('hint');if(h)h.textContent=''}
 async function codePhoto(inp){const f=inp.files[0];if(!f)return;toast('Lecture du code…');let u;
   try{let code=null;u=URL.createObjectURL(f);
     if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}).detect(await createImageBitmap(f));if(r.length)code=r[0].rawValue}catch(e){}}
