@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#FF6600"><title>PrixMalin</title>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#FF6600"><title>PrixMalin v5</title>
 <style>
 :root{--bg:#F6F7FB;--c:#fff;--t:#111827;--t2:#6B7280;--p:#FF6600;--g:#16A34A;--r:#DC2626;--o:#D97706;--sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px)}
 @media(prefers-color-scheme:dark){:root{--bg:#0B1020;--c:#171E33;--t:#F3F4F6;--t2:#9CA3AF}}
@@ -24,6 +24,10 @@ nav button{background:none;border:none;color:var(--t2);font-size:11px;font-weigh
 </style></head><body>
 <h1>PrixMalin<small>Scanne • Vérifie les promos • Compare</small></h1>
 <div id="app"></div><div id="toast"></div>
+<div id="sc" style="display:none;position:fixed;inset:0;background:#000;z-index:90"><video id="vid" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:6%;right:6%;top:30%;height:26%;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.5)"></div>
+<div id="hint" style="position:absolute;left:0;right:0;top:60%;text-align:center;color:#fff;font-weight:700;padding:0 20px"></div>
+<button class="btn" style="position:absolute;left:20px;right:20px;bottom:calc(30px + var(--sb));width:auto" onclick="stopScan()">✕ Fermer</button></div>
 <nav id="nav"></nav>
 <script>
 const K='prixmalin_v1',ST={Migros:'#FF6600',Lidl:'#0050AA',Coop:'#E4002B',Denner:'#8B0000',Autre:'#6B7280'};
@@ -60,20 +64,21 @@ async function webSearch(){
   try{$('web').textContent=await ai(`Trouve les prix actuels en Suisse (Migros, Coop, Lidl, Denner, Galaxus, etc.) pour : ${p.name||''} ${p.brand||''} ${p.qty||''}. Réponds en français, 6 lignes max : magasin, prix, date, source. Si tu n'es pas sûr, dis-le clairement.`,{search:true})}catch(e){$('web').textContent='Recherche indisponible.'}}
 
 /* ===== SCAN ===== */
-function rScan(){$('app').innerHTML=`<div class="card"><video id="vid" playsinline muted style="width:100%;border-radius:14px;display:none;max-height:260px;object-fit:cover;border:3px solid var(--p)"></video><div id="hint" class="sm" style="margin:6px 0"></div>
+function rScan(){$('app').innerHTML=`<div class="card">
 <button class="btn" onclick="startScan()">📷 Scanner un code-barres</button>
 <label class="btn g">📸 Photo du code-barres<input type="file" accept="image/*" capture="environment" hidden onchange="codePhoto(this)"></label>
 <div class="row"><input id="code" inputmode="numeric" placeholder="Ou tape le code"><button class="btn g" style="flex:0 0 70px" onclick="lookup($('code').value)">OK</button></div>
 <label class="btn g">🏷️ Photo de l'étiquette (IA)<input type="file" accept="image/*" capture="environment" hidden onchange="labelPhoto(this)"></label></div><div id="prod"></div>`;if(cur)renderProd()}
 function loadZ(){return new Promise((ok,ko)=>{if(window.ZXing)return ok();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
-async function startScan(){stopScan();const v=$('vid');v.style.display='block';$('hint').textContent='Démarrage de la caméra…';
+async function startScan(){stopScan();const v=$('vid');$('sc').style.display='block';$('hint').textContent='Démarrage de la caméra…';
   try{await loadZ();const Z=ZXing,h=new Map();
     h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E]);h.set(Z.DecodeHintType.TRY_HARDER,true);
     zr=new Z.BrowserMultiFormatReader(h,250);
-    await zr.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},'vid',x=>{if(x)found(x.getText())});
-    $('hint').textContent='Vise le code-barres, à plat, bien net et éclairé…';
+    await zr.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},'vid',x=>{if(x)found(x.getText())});
+    try{await v.srcObject.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+    $('hint').textContent='Place le code-barres dans le cadre, à plat et net';
   }catch(e){const n=e&&e.name||'?';toast(n==='NotAllowedError'?'Caméra refusée : touche aA > Réglages du site web > Caméra > Autoriser, puis recharge.':'Caméra indisponible ('+n+'). Utilise « Photo du code-barres » ou ouvre la page dans Safari.');stopScan()}}
-function stopScan(){scanning=false;try{zr&&zr.reset()}catch(e){}zr=null;const v=$('vid');if(v){v.style.display='none'}const h=$('hint');if(h)h.textContent=''}
+function stopScan(){scanning=false;try{zr&&zr.reset()}catch(e){}zr=null;const sc=$('sc');if(sc)sc.style.display='none';const h=$('hint');if(h)h.textContent=''}
 async function codePhoto(inp){const f=inp.files[0];if(!f)return;toast('Lecture du code…');let u;
   try{let code=null;u=URL.createObjectURL(f);
     if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}).detect(await createImageBitmap(f));if(r.length)code=r[0].rawValue}catch(e){}}
@@ -86,6 +91,7 @@ async function lookup(c){
     if(d.status===1){const p=d.product,n=p.nutriments||{};D.prod[c]={name:p.product_name||'Produit sans nom',brand:p.brands||'',img:p.image_front_small_url||'',qty:p.quantity||'',nutri:p.nutriscore_grade||'',sugar:n.sugars_100g,salt:n.salt_100g,add:p.additives_n,alg:(p.allergens_tags||[]).map(a=>a.replace('en:','')),pq:p.product_quantity,pu:p.product_quantity_unit}}
     else if(!D.prod[c])D.prod[c]={name:'Produit inconnu ('+c+')',brand:'',alg:[]}}catch(e){if(!D.prod[c])D.prod[c]={name:'Produit '+c,brand:'',alg:[]}}
   save();renderProd();
+  if(D.auto!==false&&D.key&&!D.prices.some(p=>p.code===c))webSearch();
   try{const r=await fetch(`https://prices.openfoodfacts.org/api/v1/prices?product_code=${c}&currency=CHF&order_by=-date&size=10`);const d=await r.json();cur.op=(d.items||[]).map(i=>i.price);analyse()}catch(e){}}
 function renderProd(pre){
   pre=pre||{};const p=D.prod[cur.code]||{},ns={a:'#038141',b:'#85BB2F',c:'#FECB02',d:'#EE8100',e:'#E63E11'},bad=(p.alg||[]).filter(a=>D.alg.includes(a));
@@ -101,7 +107,7 @@ function renderProd(pre){
   <div><label class="f">Unité</label><select id="u" onchange="analyse()">${['g','kg','ml','l','pc'].map(x=>`<option ${x===(pre.unite||p.pu||'g')?'selected':''}>${x}</option>`).join('')}</select></div>
   <div><label class="f">Offre</label><select id="pm" onchange="analyse()">${[['none','Aucune'],['2for1','2 pour 1'],['3for2','3 pour 2'],['half2','2e à −50%']].map(x=>`<option value="${x[0]}" ${x[0]===pre.promo?'selected':''}>${x[1]}</option>`).join('')}</select></div></div>
   <div id="ver"></div>
-  <div class="row"><button class="btn ok" onclick="savePrice()">💾 Enregistrer</button><button class="btn g" onclick="speak()">🔊</button></div>
+  <div class="row"><button class="btn ok" onclick="savePrice()">💾 Enregistrer</button><button class="btn g" onclick="speak()">🔊 Écouter</button></div>
   <div class="row"><button class="btn g" onclick="addList()">➕ Liste</button><button class="btn g" onclick="webSearch()">🌐 Moins cher ailleurs ?</button></div>
   <div id="web" class="sm" style="white-space:pre-wrap;margin-top:10px"></div></div>`;analyse()}
 function getF(){const g=i=>$(i)?$(i).value:'',r=+g('cu'==='EUR'?'':'')||0;const eur=g('cu')==='EUR',k=eur?D.rate:1;
@@ -131,7 +137,8 @@ function analyse(){if(!cur||!$('ver'))return;const f=getF(),b=base(f),u=u100(f,b
   $('ver').innerHTML=L.map(x=>`<div class="v ${x[0]}">${x[1]}</div>`).join('');cur.txt=L.map(x=>x[1].replace(/<[^>]+>/g,'')).join('. ')}
 function savePrice(){const f=getF(),b=base(f);if(!f.prix)return toast('Entre un prix');
   D.prices.push({id:Date.now(),code:cur.code,name:(D.prod[cur.code]||{}).name,store:D.store,price:f.prix,old:f.ancien_prix,promo:f.promo,qty:b?b.n:0,kind:b?b.k:'',u100:u100(f,b),date:new Date().toISOString().slice(0,10)});save();toast('Prix enregistré ✅');analyse()}
-function speak(){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(cur.txt||'Rien à lire');u.lang='fr-FR';speechSynthesis.speak(u)}catch(e){}}
+function speak(){const p=D.prod[cur.code]||{},t=(p.name||'')+'. '+($('ver')?$('ver').innerText:'');toast('🔊 Lecture en cours…');
+  try{const ss=speechSynthesis;ss.cancel();ss.resume();const u=new SpeechSynthesisUtterance(t.replace(/[^\p{L}\p{N}\s.,%:€'\/-]/gu,' '));u.lang='fr-FR';const v=ss.getVoices().find(x=>x.lang&&x.lang.startsWith('fr'));if(v)u.voice=v;ss.speak(u)}catch(e){toast('Voix indisponible')}}
 function addList(){D.list.push({id:Date.now(),t:(D.prod[cur.code]||{}).name||'Produit',d:0});save();toast('Ajouté à la liste 🛒')}
 
 /* ===== HISTORIQUE / LISTE / RÉGLAGES ===== */
@@ -148,6 +155,7 @@ function tg(id){const x=D.list.find(y=>y.id===id);x.d=!x.d;save();rList()}
 function rSet(){$('app').innerHTML=`<div class="card"><b>Clé IA (Anthropic)</b><div class="sm">Pour lire les étiquettes et chercher les prix en ligne. Reste sur cet iPhone.</div>
   <input id="k" type="password" placeholder="sk-ant-…" value="${esc(D.key)}" style="margin-top:8px"><button class="btn" onclick="D.key=$('k').value.trim();save();toast('Clé enregistrée ✅')">Enregistrer</button></div>
   <div class="card"><b>Mes allergies</b><div style="margin-top:6px">${ALG.map(a=>`<span class="chip" style="${D.alg.includes(a[1])?'background:#DC2626;color:#fff':''}" onclick="D.alg=D.alg.includes('${a[1]}')?D.alg.filter(z=>z!=='${a[1]}'):[...D.alg,'${a[1]}'];save();rSet()">${a[0]}</span>`).join('')}</div></div>
+  <div class="card"><b>Prix automatiques au scan</b><div class="sm" style="margin:4px 0 8px">Cherche le prix en ligne à chaque scan (utilise ta clé IA, quelques centimes par scan).</div><span class="chip" style="${D.auto!==false?'background:#16A34A;color:#fff':''}" onclick="D.auto=D.auto===false;save();rSet()">${D.auto!==false?'Activé':'Désactivé'}</span></div>
   <div class="card"><b>Taux € → CHF : ${D.rate}</b><button class="btn g" onclick="rate()">Mettre à jour (taux du jour)</button></div>
   <div class="card"><button class="btn g" onclick="exp()">💾 Sauvegarder mes données</button><button class="btn d" onclick="if(confirm('Tout effacer ?')){localStorage.removeItem(K);location.reload()}">Réinitialiser</button></div>`}
 async function rate(){try{const d=await(await fetch('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=CHF')).json();D.rate=d.rates.CHF;save();rSet();toast('Taux mis à jour')}catch(e){toast('Taux indisponible')}}
